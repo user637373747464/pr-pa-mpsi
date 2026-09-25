@@ -1380,7 +1380,19 @@ function delDoc(id){
   if(LIB.mode==="db")return libRoot().collection("docs").doc(id).delete();
   LIB.docs=LIB.docs.filter(function(x){return x.id!==id;});saveLocalLib();return Promise.resolve();
 }
-function errMsg(c){return {not_granted:"Ajoute ta clé Gemini dans Réglages.",rate_limited:"Trop de demandes d'un coup : réessaie dans un instant.",prompt_too_large:"Texte trop long : raccourcis ou efface la conversation.",images_unavailable:"Les photos ne sont pas prises en charge ici.",image_rejected:"Photo refusée : essaie une autre image, en JPEG ou PNG.",invalid_json:"Réponse illisible de l'IA : réessaie.",tools_unavailable:"Le rangement automatique n'est pas disponible ici.",no_key:"Ajoute ta clé Gemini dans Réglages.",bad_key:"Clé Gemini refusée : vérifie-la dans Réglages.",bad_model:"Modèle introuvable : touche Enregistrer et tester dans Réglages.",network:"Pas de connexion internet : réessaie.",cancelled:""}[c]||"L'IA n'a pas pu répondre. Réessaie.";}
+function errMsg(c){
+  var rt=typeof gemResetTime==="function"?gemResetTime():"";
+  var m={not_granted:"Ajoute ta clé Gemini dans Réglages.",no_key:"Ajoute ta clé Gemini dans Réglages.",bad_key:"Clé Gemini refusée : vérifie-la dans Réglages.",bad_model:"Modèle introuvable : touche Enregistrer et tester dans Réglages.",forbidden:"Ce modèle n'est pas accessible avec ta clé : touche Enregistrer et tester dans Réglages.",
+    rate_limited:"Trop de demandes en une minute pour le quota gratuit de Gemini : attends une minute, puis réessaie.",
+    quota_day:"Quota gratuit de Gemini épuisé pour aujourd'hui, sur tous les modèles. Il se recharge "+(rt?"vers "+rt:"cette nuit")+". Pour ne plus être bloqué, active la facturation dans Google AI Studio.",
+    upstream_error:"Gemini est surchargé en ce moment : réessaie dans quelques minutes.",empty_completion:"L'IA n'a rien renvoyé : réessaie, ou découpe l'exercice en plusieurs parties.",
+    refused:"Gemini a bloqué sa réponse (filtre de sécurité, ou texte trop proche d'une source connue) : réessaie, ou reformule l'énoncé.",
+    prompt_too_large:"Texte trop long : raccourcis ou efface la conversation.",images_unavailable:"Les photos ne sont pas prises en charge ici.",image_rejected:"Photo illisible pour l'IA : reprends-la plus nette, ou fais une capture d'écran de la photo.",
+    invalid_request:"Gemini a refusé la demande"+(GEMLAST?" ("+GEMLAST+")":"")+" : réessaie avec une autre photo ou un texte plus court.",invalid_json:"Réponse illisible de l'IA : réessaie.",tools_unavailable:"Le rangement automatique n'est pas disponible ici.",
+    geo:"Gemini n'est pas disponible depuis ta connexion actuelle.",network:"Pas de connexion internet : réessaie.",cancelled:""};
+  if(Object.prototype.hasOwnProperty.call(m,c))return m[c];
+  return "Gemini a renvoyé une erreur"+(GEMLAST?" : "+GEMLAST:"")+". Réessaie dans un instant.";
+}
 var CHLIST=null;
 function chapList(){if(CHLIST)return CHLIST;CHLIST=Object.keys(CHI).map(function(id){var x=CHI[id];return id+" | "+PMAT[x.m].court+" "+(x.y==="mpsi"?"MPSI":"MP")+" | "+x.c.t;}).join("\n");return CHLIST;}
 function matOptions(cur,auto){return (auto?'<option value="">L\'IA choisit</option>':"")+LMAT_ORDER.map(function(m){return '<option value="'+m+'"'+(m===cur?" selected":"")+'>'+esc(lmat(m).nom)+'</option>';}).join("");}
@@ -1413,6 +1425,7 @@ function vFolders(){
   h+=group("Mes dossiers",rows,"",true);
   var rec=LIB.exos.map(function(e){return {k:"ex",o:e};}).concat(LIB.docs.map(function(d){return {k:"doc",o:d};})).sort(function(a,b){return byDate(a.o,b.o);}).slice(0,5);
   if(rec.length)h+=group("Ajoutés récemment",rec.map(function(x){return x.k==="ex"?exoRow(x.o):docRow(x.o);}).join(""),"",true);
+  h+=group("Dossier partagé",linkCell("Cours (LLG H4 ..)","https://drive.google.com/drive/folders/1R34bV4IskTdP8Hsv6KXKM6cpxyFNK8e2","Google Drive : télécharge un PDF, puis envoie-le ici"),"",true);
   return h;
 }
 function vFolder(t){
@@ -1452,10 +1465,30 @@ function vExDir(key){
   return h;
 }
 
+/* ---------- Photos : conversion en JPEG (HEIC iPhone, photos trop lourdes) ---------- */
+function prepImg(f){
+  if(!f||!isImg(f))return Promise.resolve(f);
+  var ok=/^image\/(jpeg|png|webp)$/.test(f.type||"")&&(f.size||0)<1500000;
+  if(ok)return Promise.resolve(f);
+  return new Promise(function(res){
+    var u=URL.createObjectURL(f),im=new Image();
+    im.onload=function(){
+      try{
+        var M=2000,w=im.naturalWidth,h=im.naturalHeight,k=Math.min(1,M/Math.max(w,h));
+        var c=document.createElement("canvas");c.width=Math.round(w*k);c.height=Math.round(h*k);
+        var x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0,c.width,c.height);
+        c.toBlob(function(b){URL.revokeObjectURL(u);if(!b){res(f);return;}res(new File([b],String(f.name||"photo").replace(/\.[^.]+$/,"")+".jpg",{type:"image/jpeg"}));},"image/jpeg",0.85);
+      }catch(e){URL.revokeObjectURL(u);res(f);}
+    };
+    im.onerror=function(){URL.revokeObjectURL(u);res(f);};
+    im.src=u;
+  });
+}
+function prepImgs(l){return l.reduce(function(p,f){return p.then(function(a){return prepImg(f).then(function(g){a.push(g);return a;});});},Promise.resolve([]));}
 /* ---------- Envoi de photos à l'IA ---------- */
 var IMP={mode:"exos",type:"",mat:"",files:[],busy:false,log:[],created:[],text:"",titre:""};
 function logI(s){IMP.log.push(s);softRender();}
-function impCan(){var exo=IMP.mode==="exos",t=IMP.text.trim();if(IMP.busy||libWait())return false;if(exo)return t?!!CAP.sample:(IMP.files.length>0&&(!!CAP.sample||!CAP.img));return IMP.files.length>0||(!!CAP.sample&&!!t);}
+function impCan(){var exo=IMP.mode==="exos",t=IMP.text.trim();if(IMP.busy||IMP.prep||libWait())return false;if(exo)return t?!!CAP.sample:(IMP.files.length>0&&(!!CAP.sample||!CAP.img));return IMP.files.length>0||(!!CAP.sample&&!!t);}
 function isImg(f){return /^image\//.test(f.type||"")||/\.(jpe?g|png|webp|gif|heic)$/i.test(f.name||"");}
 function vImport(){
   var noImg=!CAP.img,exo=IMP.mode==="exos",h='<h1 class="large">Envoyer à l\'IA</h1>';
@@ -1468,7 +1501,7 @@ function vImport(){
   h+='<div class="actions"><label class="btn'+(IMP.files.length||noImg?"":" solid")+' wide">'+(IMP.files.length?"Ajouter d'autres photos":(noImg?"Joindre les photos":"Prendre ou choisir des photos"))+'<input type="file" accept="image/*" multiple data-file="imp" hidden></label>'+(!exo?'<label class="btn wide">Choisir des PDF<input type="file" accept="application/pdf" multiple data-file="imp" hidden></label>':"")+'</div>';
   if(IMP.files.length)h+=group(IMP.files.length+" fichier"+(IMP.files.length>1?"s":"")+" joint"+(IMP.files.length>1?"s":""),IMP.files.map(function(f,i){return '<div class="cell"><div class="cell-body"><div class="cell-title">'+esc(f.name||("Photo "+(i+1)))+'</div><div class="cell-sub">'+Math.max(1,Math.round((f.size||0)/1024))+' ko</div></div><button class="iconbtn" data-act="impdel" data-id="'+i+'" aria-label="Retirer">×</button></div>';}).join(""),noImg&&exo?"Les photos sont gardées avec l'exercice pour vérifier la réécriture.":"",true);
   if(!CAP.sample)h+='<p class="gf" style="margin:0 32px 18px">'+(CAP.ready.sample?"Ajoute ta clé Gemini dans Réglages pour activer l'IA.":"Connexion à l'IA…")+'</p>';
-  h+='<div class="actions"><button class="btn solid wide" data-act="impgo"'+(impCan()?"":" disabled")+'>'+(IMP.busy?"L'IA travaille…":((exo||CAP.sample)?"Envoyer à l'IA":"Enregistrer"))+'</button></div>';
+  h+='<div class="actions"><button class="btn solid wide" data-act="impgo"'+(impCan()?"":" disabled")+'>'+(IMP.prep?"Préparation des photos…":IMP.busy?"L'IA travaille…":((exo||CAP.sample)?"Envoyer à l'IA":"Enregistrer"))+'</button></div>';
   if(IMP.log.length)h+=group("Suivi",IMP.log.map(function(l){return '<div class="text">'+esc(l)+'</div>';}).join(""),"",true);
   if(IMP.created.length)h+=group("Créés",IMP.created.map(function(c){var o=c.k==="ex"?exoById(c.id):docById(c.id);return o?(c.k==="ex"?exoRow(o):docRow(o)):"";}).join(""),"",true);
   return h;
@@ -1502,7 +1535,7 @@ function pickMat(forced,ai,chap){if(forced)return forced;if(CHI[chap])return CHI
 function processExoPhoto(f,n){
   logI("Photo "+n+" : lecture par l'IA…");
   return upOne(f).then(function(aid){
-    return CAP.sample(exoPrompt(),{images:[f],modelTier:"default"}).then(function(r){
+    return CAP.sample(exoPrompt(),{images:[f],modelTier:"quick"}).then(function(r){
       var p=parseExos(r.text);
       if(!p.exos.length){logI("Photo "+n+" : aucun exercice reconnu. Essaie une photo plus nette et bien cadrée.");return;}
       var type=IMP.type||normType(p.type||"TD"),c=0;
@@ -1520,7 +1553,7 @@ function processDocPhotos(imgs){
     var pics=imgs.slice(0,Math.max(1,CAP.imgMax||1));
     if(!CAP.img){pics=[];}
     logI("Lecture par l'IA…");
-    var opts={modelTier:"default"};if(pics.length)opts.images=pics;
+    var opts={modelTier:"quick"};if(pics.length)opts.images=pics;
     return CAP.sample(docPhotoPrompt(imgs.length,pics.length),opts).then(function(r){
       var p=parseDoc(r.text),type=IMP.type||normType(p.type||"Copie"),chap=CHI[p.chap]&&(!IMP.mat||CHI[p.chap].m===IMP.mat)?p.chap:"";
       return saveDoc({titre:p.titre||("Document du "+FDM.format(new Date())),assets:ids,mat:pickMat(IMP.mat,p.mat,chap),type:type,chap:chap,dossier:p.dossier,resume:p.resume,source:imgs.length+" photo"+(imgs.length>1?"s":"")}).then(function(doc){IMP.created.push({k:"doc",id:doc.id});logI("Rangé dans "+folderLabel(type)+" : "+doc.titre+".");});
@@ -1542,7 +1575,7 @@ function processExoText(text,imgs){
   if(imgs.length)logI("Envoi de "+imgs.length+" photo"+(imgs.length>1?"s":"")+"…");
   return imgs.reduce(function(p,f){return p.then(function(){return upOne(f).then(function(id){if(id)ids.push(id);});});},Promise.resolve()).then(function(){
     logI("Lecture du texte par l'IA…");
-    return CAP.sample(exoPrompt(text),{modelTier:"default"}).then(function(r){
+    return CAP.sample(exoPrompt(text),{modelTier:"quick"}).then(function(r){
       var p=parseExos(r.text);
       if(!p.exos.length){logI("Aucun exercice reconnu dans le texte. Vérifie que le scan a bien lu la feuille.");return;}
       var type=IMP.type||normType(p.type||"TD"),c=0;
@@ -1564,7 +1597,7 @@ function processDocGroup(imgs,text){
     };
     if(CAP.sample&&(pics.length||text)){
       logI("Lecture par l'IA…");
-      var opts={modelTier:"default"};if(pics.length)opts.images=pics;
+      var opts={modelTier:"quick"};if(pics.length)opts.images=pics;
       return CAP.sample(docPhotoPrompt(imgs.length,pics.length,text),opts).then(function(r){return save(parseDoc(r.text));},function(e){logI(errMsg(e&&e.code)+" Le document est quand même enregistré.");return save({});});
     }
     return save({});
@@ -1624,6 +1657,7 @@ function solBody(e){
   h+='<div class="rich mathy">'+(s.cor?md(s.cor):'<span class="thinking">Correction en cours de rédaction…</span>')+'</div>';
   if(s.ret)h+='<div class="solsec"><div class="solh">À retenir</div><div class="rich mathy">'+md(s.ret)+'</div></div>';
   if(s.met)h+='<div class="solsec"><div class="solh">Méthodes</div><div class="rich mathy">'+md(s.met)+'</div></div>';
+  if(!busy&&e.solModel)h+='<div class="empty small">Rédigé par '+esc(e.solModel)+'. Vérifie les étapes clés.</div>';
   if(busy)h+='<div class="empty small"><span class="thinking">Rédaction en cours…</span></div>';
   return h;
 }
@@ -1635,8 +1669,10 @@ function genSol(id,tier){
   var prompt="Tu es professeur en classe préparatoire scientifique (MPSI, puis MP option SI, objectif concours X-ENS). Pour l'exercice ci-dessous, rédige en français, avec toutes les mathématiques en LaTeX entre $...$ (ou $$...$$ pour une formule isolée), exactement ces quatre parties, dans cet ordre et avec ces titres :\n## Indications\n2 à 4 indications progressives, numérotées 1., 2., 3., qui mettent sur la voie sans donner la solution.\n## Correction\nUne correction complète et rigoureuse, rédigée comme on l'attend dans une copie de concours, question par question.\n## À retenir\n3 à 6 points : les idées clés, les résultats et les pièges de cet exercice.\n## Méthodes\nLes méthodes réutilisables, une par ligne, chacune commençant par son nom en gras.\n\nChapitre : "+(e.chap?chapName(e.chap):"non précisé")+"\n\nÉnoncé :\n"+String(e.enonce||"").slice(0,20000)+(e.demo?"\n\nDémonstration proposée par l'élève, à vérifier dans la correction :\n"+String(e.demo).slice(0,12000):"");
   softRender();
   CAP.sample(prompt,{modelTier:tier||"default",signal:ctl.signal,onText:function(u){g.text=u.text;paintSol(id);}}).then(function(r){
-    g.text=r.text;return updExo(id,{sol:r.text,solTier:tier||"default"}).catch(function(){});
-  },function(err){if(!g.text)g.err=errMsg(err&&err.code);}).then(function(){g.ctl=null;softRender();});
+    var t=String(r.text||"");
+    if(!t.trim()){g.text="";g.err=errMsg("empty_completion");return;}
+    g.text=t;return updExo(id,{sol:t,solTier:tier||"default",solModel:String(r.model||"")}).catch(function(){});
+  },function(err){if(err&&err.code==="cancelled")return;if(!/#{1,4}[ \t]*Correction/i.test(g.text||"")){g.text="";g.err=errMsg(err&&err.code);}}).then(function(){g.ctl=null;softRender();});
 }
 function imgBlock(a,alt){if(!a)return "";var u=blobURL(a);return '<a class="imgwrap" href="'+esc(u||"#")+'" target="_blank" rel="noopener"><img src="'+esc(u)+'" alt="'+esc(alt)+'" loading="lazy"></a>';}
 function vEx(id){
@@ -1746,10 +1782,11 @@ var CHAT=(function(){try{var c=JSON.parse(localStorage.getItem(CKEY)||"null");if
 function saveChat(){try{CHAT.msgs=CHAT.msgs.slice(-40);localStorage.setItem(CKEY,JSON.stringify(CHAT));}catch(e){}}
 var chatCtl=null,chatDraft="",chatImg=null,chatCtx=null;
 var SUGG=["Explique-moi le lemme de Cesàro avec un exemple","Donne-moi un exercice type X-ENS sur les suites récurrentes","Fais-moi un plan de révision pour mon prochain DS","Explique-moi la formule de Taylor-Young"];
-function rules(){
+function needTools(t){return /agenda|ajoute|rajoute|note (ça|ca)|range|enregistre|sauvegarde|carte|flashcard|paquet|kh?olle|colle|progression|avancement|o(ù|u) j.en suis|prochain ds|biblioth|mes exercices|mes exos|retrouve|cherche dans/i.test(String(t||""));}
+function rules(withTools){
   return "Tu es le tuteur de prépa d'un élève de MPSI qui vise le concours X-ENS (filière MP, option SI) en 2028. Nous sommes le "+FL.format(today0())+". Réponds en français, avec rigueur et concision : idée clé, méthode, puis détails utiles. Écris toutes les mathématiques en LaTeX entre $...$, ou $$...$$ pour une formule isolée. Pour un exercice, donne d'abord une indication et ne rédige la solution complète que si l'élève la demande. Reste dans le programme officiel de MPSI et de MP."
-    +(CAP.tools?" Outils : ranger_exercice enregistre un exercice dans sa bibliothèque (recopie fidèlement l'énoncé, en LaTeX) ; chercher_exercices retrouve ses exercices ; progression donne son avancement et son prochain DS ; ajouter_agenda ajoute une tâche ou une kholle à son agenda ; creer_cartes crée des flashcards dans un de ses paquets (pour du vocabulaire anglais : recto le mot anglais en gras, verso la traduction puis un exemple en italique). Après une action, dis en une phrase ce que tu as fait.":" Pour ranger un exercice, l'élève utilise le bouton Envoyer des photos de l'onglet Biblio.")
-    +"\n\nChapitres du programme (id | matière | titre) :\n"+chapList();
+    +(CAP.tools&&withTools?" Outils : ranger_exercice enregistre un exercice dans sa bibliothèque (recopie fidèlement l'énoncé, en LaTeX) ; chercher_exercices retrouve ses exercices ; progression donne son avancement et son prochain DS ; ajouter_agenda ajoute une tâche ou une kholle à son agenda ; creer_cartes crée des flashcards dans un de ses paquets (pour du vocabulaire anglais : recto le mot anglais en gras, verso la traduction puis un exemple en italique). Après une action, dis en une phrase ce que tu as fait.":" Pour ranger un exercice, l'élève utilise le bouton Envoyer des photos de l'onglet Biblio.")
+    +(CAP.tools&&withTools?"\n\nChapitres du programme (id | matière | titre) :\n"+chapList():"");
 }
 function chatTools(){
   return [
@@ -1776,14 +1813,14 @@ function sendChat(text){
   CHAT.msgs.push({role:"user",content:content,show:text,ctx:chatCtx?chatCtx.label:"",img:chatImg?1:0});
   var a={role:"assistant",content:"",pending:true};CHAT.msgs.push(a);
   var img=chatImg;chatImg=null;chatCtx=null;chatDraft="";
-  var hist=CHAT.msgs.filter(function(m){return m!==a&&m.content;}).slice(-14).map(function(m){return {role:m.role,content:m.content};});
+  var hist=CHAT.msgs.filter(function(m){return m!==a&&m.content;}).slice(-10).map(function(m){return {role:m.role,content:String(m.content).slice(0,6000)};});
   while(hist.length&&hist[0].role!=="user")hist.shift();
   var ctl=new AbortController();chatCtl=ctl;
   var opts={cache:false,signal:ctl.signal,modelTier:CHAT.deep?"complex":"default",onText:function(u){a.content=u.text;paintLast(a);}};
-  if(CAP.tools)opts.tools=chatTools();
+  var useT=!!CAP.tools&&needTools(text);if(useT)opts.tools=chatTools();
   if(img&&CAP.img)opts.images=[img];
   saveChat();render({chatEnd:true});
-  CAP.sample([{role:"user",content:rules()}].concat(hist),opts).then(function(r){
+  CAP.sample([{role:"user",content:rules(useT)}].concat(hist),opts).then(function(r){
     a.content=r.text;if(r.truncated)a.note="Réponse coupée : demande moins à la fois.";
   },function(e){a.content=(e&&e.text)||"";a.note=errMsg(e&&e.code);}).then(function(){
     a.pending=false;chatCtl=null;
@@ -1808,7 +1845,7 @@ function vChat(){
   var h='<div class="chatbar">'+(CAP.sample?'<button class="chipbtn'+(CHAT.deep?" on":"")+'" data-act="chatdeep" aria-pressed="'+CHAT.deep+'">Réflexion approfondie</button>':"")+(CHAT.msgs.length&&!chatCtl?'<button class="chipbtn" data-act="chatclear">Effacer</button>':"")+'</div>';
   if(!CAP.sample)return h+'<div class="empty">'+(CAP.ready.sample?"Ajoute ta clé Gemini dans Réglages pour utiliser le tuteur.":"Connexion à l'IA…")+'</div>';
   if(!CHAT.msgs.length){
-    h+='<div class="chat-empty"><b>Ton tuteur de prépa</b><p>Pose une question de cours, envoie la photo d\'un exercice, ou demande-lui de t\'expliquer un chapitre.</p></div>';
+    h+='<div class="chat-empty"><b>Ton tuteur de prépa</b><p>Pose une question de cours, envoie la photo d\'un exercice, ou demande-lui d\'ajouter une tâche ou une kholle à ton agenda.</p></div>';
     h+='<div class="sugg">'+SUGG.map(function(s,i){return '<button class="chipbtn" data-act="chatsugg" data-id="'+i+'">'+esc(s)+'</button>';}).join("")+'</div>';
   }else{
     h+='<div class="msgs">'+CHAT.msgs.map(function(m,i){
@@ -2186,7 +2223,7 @@ function aiGen(){
   if(a.mode==="vocab"&&!txt){a.err="Colle ou scanne ton vocabulaire d'abord.";softRender();return;}
   if(a.mode==="cours"&&!txt&&!a.chap){a.err="Colle un texte ou choisis un chapitre.";softRender();return;}
   a.busy=true;a.err="";a.cards=[];a.keep={};a.count=0;softRender();
-  CAP.sample(a.mode==="vocab"?vocabPrompt(txt):coursPrompt(txt,a.chap),{modelTier:"default",onText:function(u){var n=(u.text.match(/=+[ \t]*CARTE[ \t]*=+/gi)||[]).length;if(n!==a.count){a.count=n;var b=document.getElementById("aigenbtn");if(b)b.textContent="L'IA prépare les cartes… "+n;}}}).then(function(r){
+  CAP.sample(a.mode==="vocab"?vocabPrompt(txt):coursPrompt(txt,a.chap),{modelTier:"quick",onText:function(u){var n=(u.text.match(/=+[ \t]*CARTE[ \t]*=+/gi)||[]).length;if(n!==a.count){a.count=n;var b=document.getElementById("aigenbtn");if(b)b.textContent="L'IA prépare les cartes… "+n;}}}).then(function(r){
     a.cards=parseCards(r.text,a.mode,a.dir);if(!a.cards.length)a.err="Aucune carte reçue : réessaie avec un texte plus clair.";
   },function(e){a.err=errMsg(e&&e.code);}).then(function(){a.busy=false;if(AIR===a)softRender();});
 }
@@ -2330,14 +2367,14 @@ function pendGo(id){
   var e=exoById(id),t=String(PEND[id]||"").trim();
   if(!e||!t||!CAP.sample||PENDBUSY[id])return;
   PENDBUSY[id]=true;PENDERR[id]="";softRender();
-  CAP.sample(exoPrompt(t),{modelTier:"default"}).then(function(r){return applyParsed(e,parseExos(r.text));},function(err){PENDERR[id]=errMsg(err&&err.code);}).then(function(){PENDBUSY[id]=false;if(!PENDERR[id])delete PEND[id];softRender();});
+  CAP.sample(exoPrompt(t),{modelTier:"quick"}).then(function(r){return applyParsed(e,parseExos(r.text));},function(err){PENDERR[id]=errMsg(err&&err.code);}).then(function(){PENDBUSY[id]=false;if(!PENDERR[id])delete PEND[id];softRender();});
 }
 function pendPhoto(id){
   var e=exoById(id);if(!e||!CAP.sample||!CAP.img||PENDBUSY[id])return;
   var ids=(e.imgs||[]).slice(0,Math.max(1,CAP.imgMax||1));if(!ids.length)return;
   PENDBUSY[id]=true;PENDERR[id]="";softRender();
   Promise.all(ids.map(function(a){return getAssetBlob(a);})).then(function(blobs){
-    return CAP.sample(exoPrompt(),{images:blobs,modelTier:"default"});
+    return CAP.sample(exoPrompt(),{images:blobs,modelTier:"quick"});
   }).then(function(r){return applyParsed(e,parseExos(r.text));}).catch(function(err){PENDERR[id]=(err&&err.code&&err.code!=="blob")?errMsg(err.code):"Impossible de lire la photo ici : scanne son texte.";}).then(function(){PENDBUSY[id]=false;softRender();});
 }
 function vPending(e){
@@ -2400,19 +2437,31 @@ function reglagesExtra(){
   return aiSettings()+group("Mes données",'<button class="cell" data-act="push" data-id="transfer"><div class="cell-body"><div class="cell-title link">Importer ou sauvegarder mes données</div></div>'+CHEV+'</button>',"Tes données restent sur cet iPhone. Crée une sauvegarde de temps en temps.",true);
 }
 
+
 /* ---------- Version autonome : Gemini et stockage local ---------- */
-var GKEY="xens-gemini-v1",GEM={key:"",model:"gemini-3.5-flash",lite:"",pro:"",models:[]},GEMUI={status:"",busy:false};
-function gemLoad(){try{var g=JSON.parse(localStorage.getItem(GKEY)||"{}");for(var k in g)GEM[k]=g[k];}catch(e){}}
+var GKEY="xens-gemini-v1",GEM={key:"",model:"gemini-3.5-flash",lite:"",pro:"",models:[],dead:{}},GEMUI={status:"",busy:false},GEMLAST="";
+function gemLoad(){try{var g=JSON.parse(localStorage.getItem(GKEY)||"{}");for(var k in g)GEM[k]=g[k];}catch(e){}if(!GEM.dead||typeof GEM.dead!=="object")GEM.dead={};}
 function gemSave(){try{localStorage.setItem(GKEY,JSON.stringify(GEM));}catch(e){}}
-function gemErr(status,t){var s=String(t||"");var c=status===429?"rate_limited":(status===400&&/api.?key/i.test(s))||status===401||status===403?"bad_key":status===404?"bad_model":status===413?"prompt_too_large":"http";return {code:c,message:s.slice(0,300)};}
+/* Les quotas gratuits de Gemini se rechargent à minuit, heure de Californie, et sont comptés modèle par modèle. */
+function ptDay(){try{return new Intl.DateTimeFormat("en-CA",{timeZone:"America/Los_Angeles"}).format(new Date());}catch(e){return ymd(today0());}}
+function gemResetTime(){try{var now=new Date(),g={};new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hourCycle:"h23",hour:"2-digit",minute:"2-digit",second:"2-digit"}).formatToParts(now).forEach(function(x){g[x.type]=x.value;});var left=((24-(+g.hour%24))*3600-(+g.minute)*60-(+g.second))*1000;return new Date(now.getTime()+left).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});}catch(e){return "";}}
+function gemIsDead(m){return !!(GEM.dead&&GEM.dead[m]===ptDay());}
+function gemKill(m){GEM.dead=GEM.dead||{};var d=ptDay();for(var k in GEM.dead)if(GEM.dead[k]!==d)delete GEM.dead[k];GEM.dead[m]=d;gemSave();}
+function gemErr(status,t){
+  var s=String(t||""),j=null;try{j=JSON.parse(s);}catch(e){}
+  var er=(j&&j.error)||{},msg=String(er.message||s).replace(/\s+/g," ").trim(),det=JSON.stringify(er.details||[]);
+  var perDay=/PerDay/i.test(det)||/per day|daily/i.test(msg),rm=det.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/),retry=rm?Math.ceil(+rm[1]):0;
+  var c=status===429?"rate_limited":((status===400||status===401||status===403)&&/api.?key/i.test(msg+det))?"bad_key":status===404?"bad_model":status===403?"forbidden":status===413?"prompt_too_large":(status>=500||status===408)?"upstream_error":(status===400&&/location is not supported/i.test(msg))?"geo":status===400?"invalid_request":"http";
+  return {code:c,status:status,message:msg.slice(0,220),perDay:perDay,retry:retry};
+}
 function gemText(j){try{return (j.candidates[0].content.parts||[]).map(function(p){return p.thought?"":(p.text||"");}).join("");}catch(e){return "";}}
-function gemTrunc(j){try{return j.candidates[0].finishReason==="MAX_TOKENS";}catch(e){return false;}}
+function gemFinish(j){try{return (j.candidates&&j.candidates[0]&&j.candidates[0].finishReason)||(j.promptFeedback&&j.promptFeedback.blockReason?"BLOCKED":"");}catch(e){return "";}}
 function downscale(file,max){
   max=max||1800;
   return new Promise(function(res){
     try{
       var url=URL.createObjectURL(file),img=new Image();
-      img.onload=function(){var w=img.naturalWidth,h=img.naturalHeight,s=Math.min(1,max/Math.max(w,h));if(s>=1&&(file.size||0)<1500000&&/jpe?g|png|webp/.test(file.type||"")){URL.revokeObjectURL(url);res(file);return;}var c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));c.getContext("2d").drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);c.toBlob(function(b){res(b||file);},"image/jpeg",0.86);};
+      img.onload=function(){var w=img.naturalWidth,h=img.naturalHeight,s=Math.min(1,max/Math.max(w,h));if(s>=1&&(file.size||0)<1500000&&/jpe?g|png|webp/.test(file.type||"")){URL.revokeObjectURL(url);res(file);return;}var c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*s));c.height=Math.max(1,Math.round(h*s));var x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);c.toBlob(function(b){res(b||file);},"image/jpeg",0.86);};
       img.onerror=function(){URL.revokeObjectURL(url);res(file);};
       img.src=url;
     }catch(e){res(file);}
@@ -2421,47 +2470,89 @@ function downscale(file,max){
 function gemContents(input,imgs){
   var turns=typeof input==="string"?[{role:"user",content:input}]:input,merged=[];
   turns.forEach(function(t){var role=t.role==="assistant"?"model":"user",txt=String(t.content||"");var l=merged[merged.length-1];if(l&&l.role===role)l.parts[0].text+="\n\n"+txt;else merged.push({role:role,parts:[{text:txt}]});});
-  return Promise.all((imgs||[]).map(function(b){return downscale(b).then(function(x){return blobToDataURL(x).then(function(u){var m=u.match(/^data:([^;]+);base64,(.*)$/);return m?{inline_data:{mime_type:m[1],data:m[2]}}:null;});});})).then(function(parts){parts=parts.filter(Boolean);var last=merged[merged.length-1];if(parts.length&&last)last.parts=parts.concat(last.parts);return merged;});
+  return Promise.all((imgs||[]).map(function(b){return downscale(b).then(function(x){return blobToDataURL(x).then(function(u){var m=u.match(/^data:([^;,]*)(?:;[^,]*)?;base64,(.*)$/);if(!m)return null;var mt=/^image\//.test(m[1])?m[1]:(/\.hei[cf]$/i.test(String(b&&b.name||""))?"image/heic":"image/jpeg");return {inline_data:{mime_type:mt,data:m[2]}};});});})).then(function(parts){parts=parts.filter(Boolean);var last=merged[merged.length-1];if(parts.length&&last)last.parts=parts.concat(last.parts);return merged;});
 }
-function gemModel(tier){if(tier==="complex"&&GEM.pro)return GEM.pro;if(tier==="quick"&&GEM.lite)return GEM.lite;return GEM.model||"gemini-3.5-flash";}
-function gemCall(input,opts,model){
-  return gemContents(input,opts.images).then(function(contents){
-    var body={contents:contents,generationConfig:{}};if(opts._json)body.generationConfig.responseMimeType="application/json";
-    var stream=!!opts.onText&&!opts._json;
-    var url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":"+(stream?"streamGenerateContent?alt=sse":"generateContent");
-    return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":GEM.key},body:JSON.stringify(body),signal:opts.signal}).then(function(resp){
-      if(!resp.ok)return resp.text().then(function(t){throw gemErr(resp.status,t);});
-      if(!stream)return resp.json().then(function(j){return {text:gemText(j),truncated:gemTrunc(j)};});
-      var reader=resp.body.getReader(),dec=new TextDecoder(),buf="",full="",trunc=false;
-      function pump(){return reader.read().then(function(r){
-        if(r.done)return {text:full,truncated:trunc};
-        buf+=dec.decode(r.value,{stream:true});var lines=buf.split("\n");buf=lines.pop();
-        lines.forEach(function(l){if(l.indexOf("data:")!==0)return;try{var j=JSON.parse(l.slice(5));var d=gemText(j);if(d){full+=d;opts.onText({text:full,delta:d});}if(gemTrunc(j))trunc=true;}catch(e){}});
-        return pump();
-      });}
-      return pump();
+/* Ordre d'essai des modèles : chaque modèle a son propre quota gratuit. */
+function gemVer(n){var v=String(n).match(/gemini-(\d+(?:\.\d+)?)/);return v?parseFloat(v[1]):0;}
+function gemPick(ms,re,ex,max){var c=ms.filter(function(n){return re.test(n)&&!(ex&&ex.test(n));});c.sort(function(a,b){var pa=/preview|exp|latest/.test(a)?1:0,pb=/preview|exp|latest/.test(b)?1:0;return gemVer(b)-gemVer(a)||pa-pb||a.length-b.length;});var seen={},out=[];c.forEach(function(n){var k=gemVer(n);if(!seen[k]&&out.length<max){seen[k]=1;out.push(n);}});return out;}
+function gemOrder(tier){
+  var ms=(GEM.models&&GEM.models.length)?GEM.models:[GEM.model,GEM.lite].filter(Boolean);
+  var fl=gemPick(ms,/flash/,/lite/,4),li=gemPick(ms,/flash-lite/,null,3),pr=gemPick(ms,/pro/,null,1),main=GEM.model?[GEM.model]:[];
+  var c=tier==="quick"?li.concat(main,fl):tier==="complex"?pr.concat(main,fl,li):main.concat(fl,li);
+  var seen={},out=[];c.forEach(function(m){if(m&&!seen[m]){seen[m]=1;out.push(m);}});
+  return out;
+}
+function gemChain(tier){return gemOrder(tier).filter(function(m){return !gemIsDead(m);});}
+function gemWait(ms,signal){return new Promise(function(res,rej){var t=setTimeout(res,ms);if(signal)signal.addEventListener("abort",function(){clearTimeout(t);rej({code:"cancelled"});},{once:true});});}
+function gemCall(contents,opts,model){
+  var body={contents:contents,generationConfig:{}};if(opts._json)body.generationConfig.responseMimeType="application/json";
+  var stream=!!opts.onText&&!opts._json;
+  var url="https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":"+(stream?"streamGenerateContent?alt=sse":"generateContent");
+  return fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-goog-api-key":GEM.key},body:JSON.stringify(body),signal:opts.signal}).then(function(resp){
+    if(!resp.ok)return resp.text().then(function(t){throw gemErr(resp.status,t);});
+    var fin=function(text,why){var bad=/^(SAFETY|RECITATION|PROHIBITED_CONTENT|BLOCKLIST|SPII|OTHER|BLOCKED|IMAGE_SAFETY)$/.test(why||"");if(!String(text).trim())throw {code:bad?"refused":"empty_completion",message:why||""};return {text:text,truncated:why==="MAX_TOKENS"||bad,model:model,bad:bad,why:why};};
+    if(!stream||!resp.body||!resp.body.getReader)return resp.text().then(function(t){
+      if(!stream){var j;try{j=JSON.parse(t);}catch(e){throw {code:"upstream_error",message:"réponse illisible"};}return fin(gemText(j),gemFinish(j));}
+      var full="",why="";t.split("\n").forEach(function(l){l=l.replace(/\r$/,"");if(l.indexOf("data:")!==0)return;try{var jj=JSON.parse(l.slice(5)),d=gemText(jj);if(d)full+=d;var w=gemFinish(jj);if(w)why=w;}catch(e){}});
+      if(full)opts.onText({text:full,delta:full});return fin(full,why);
     });
+    var reader=resp.body.getReader(),dec=new TextDecoder(),buf="",full="",why="";
+    function eat(l){l=l.replace(/\r$/,"");if(l.indexOf("data:")!==0)return;var j;try{j=JSON.parse(l.slice(5));}catch(e){return;}if(j&&j.error)throw gemErr(+j.error.code||500,JSON.stringify(j));var d=gemText(j);if(d){full+=d;opts.onText({text:full,delta:d});}var w=gemFinish(j);if(w)why=w;}
+    function pump(){return reader.read().then(function(r){
+      if(r.done){buf+=dec.decode();if(buf)eat(buf);return fin(full,why);}
+      buf+=dec.decode(r.value,{stream:true});var lines=buf.split("\n");buf=lines.pop();
+      lines.forEach(eat);
+      return pump();
+    });}
+    return pump();
   });
 }
 function gemSample(input,opts){
   opts=opts||{};
   if(!GEM.key)return Promise.reject({code:"no_key"});
-  var m=gemModel(opts.modelTier);
-  return gemCall(input,opts,m).catch(function(e){
-    if(e&&e.name==="AbortError")throw {code:"cancelled"};
-    if(e&&(e.code==="rate_limited"||e.code==="bad_model")&&m!==GEM.model&&GEM.model)return gemCall(input,opts,GEM.model);
-    if(e&&e.code)throw e;
-    throw {code:"network",message:String(e)};
-  }).catch(function(e){if(e&&e.name==="AbortError")throw {code:"cancelled"};throw e;});
+  var chain=gemChain(opts.modelTier);
+  if(!chain.length){GEMLAST="";return Promise.reject({code:"quota_day"});}
+  var i=0,last=null,partial=null,dayOut=0,retried={};
+  return gemContents(input,opts.images).then(function(contents){
+    function next(){
+      if(opts.signal&&opts.signal.aborted)return Promise.reject({code:"cancelled"});
+      if(i>=chain.length){
+        if(partial){GEMLAST="";return partial;}
+        var e=dayOut>=chain.length?{code:"quota_day"}:(last||{code:"upstream_error"});
+        GEMLAST=e.message||"";throw e;
+      }
+      var m=chain[i];
+      return gemCall(contents,opts,m).then(function(r){
+        if(r.bad){if(!partial||r.text.length>partial.text.length)partial=r;last={code:"refused",message:r.why};i++;return next();}
+        GEMLAST="";return r;
+      },function(e){
+        if(e&&e.name==="AbortError")throw {code:"cancelled"};
+        if(!e||!e.code)e={code:"network",message:String((e&&e.message)||e||"")};
+        last=e;
+        if(e.code==="cancelled"||e.code==="bad_key"||e.code==="network"||e.code==="geo"||e.code==="prompt_too_large"){GEMLAST=e.message||"";throw e;}
+        if(e.code==="rate_limited"){
+          if(e.perDay){gemKill(m);dayOut++;i++;return next();}
+          if(!retried[m]&&e.retry&&e.retry<=12){retried[m]=1;return gemWait(e.retry*1000+300,opts.signal).then(next);}
+          i++;return next();
+        }
+        if(e.code==="upstream_error"&&!retried[m]){retried[m]=1;return gemWait(1500,opts.signal).then(next);}
+        if(e.code==="bad_model"||e.code==="forbidden")gemKill(m);
+        i++;return next();
+      });
+    }
+    return next();
+  });
 }
 gemSample.json=function(prompt,opts){var o={};for(var k in (opts||{}))o[k]=opts[k];o._json=true;return gemSample(prompt,o).then(function(r){var t=String(r.text||"").trim().replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"");try{return JSON.parse(t);}catch(e){throw {code:"invalid_json"};}});};
 gemSample.limits=function(){return Promise.resolve({images:{maxCount:4,mediaTypes:["image/jpeg","image/png","image/webp"]}});};
 function gemDiscover(){
   return fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",{headers:{"x-goog-api-key":GEM.key}}).then(function(r){if(!r.ok)return r.text().then(function(t){throw gemErr(r.status,t);});return r.json();}).then(function(j){
     var ms=(j.models||[]).filter(function(m){return (m.supportedGenerationMethods||[]).indexOf("generateContent")>=0&&/gemini/.test(m.name)&&!/(embed|tts|image|live|audio|aqa|learnlm|robotics|computer)/i.test(m.name);}).map(function(m){return m.name.replace(/^models\//,"");});
-    var ver=function(n){var v=n.match(/gemini-(\d+(?:\.\d+)?)/);return v?parseFloat(v[1]):0;};
-    var best=function(re,ex){var c=ms.filter(function(n){return re.test(n)&&!(ex&&ex.test(n))&&!/preview|exp|latest/.test(n);});if(!c.length)c=ms.filter(function(n){return re.test(n)&&!(ex&&ex.test(n));});c.sort(function(a,b){return ver(b)-ver(a)||a.length-b.length;});return c[0]||"";};
-    if(ms.length){GEM.models=ms;GEM.model=best(/flash/,/lite/)||ms[0];GEM.lite=best(/flash-lite/);GEM.pro=best(/pro/);}
+    if(ms.length){
+      GEM.models=ms;
+      if(!GEM.model||ms.indexOf(GEM.model)<0)GEM.model=gemPick(ms,/flash/,/lite/,1)[0]||ms[0];
+      GEM.lite=gemPick(ms,/flash-lite/,null,1)[0]||"";GEM.pro=gemPick(ms,/pro/,null,1)[0]||"";
+    }
     gemSave();return GEM;
   });
 }
@@ -2469,13 +2560,17 @@ function aiSettings(){
   var h='<section class="grp"><h2 class="gh-big">Intelligence artificielle</h2><div class="list"><label class="frow"><span>Clé Gemini</span><input class="field" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" data-gem="key" value="'+esc(GEM.key)+'" placeholder="Colle ta clé ici"></label>'+(GEM.models&&GEM.models.length?'<label class="frow"><span>Modèle</span><select class="field" data-gems="model">'+GEM.models.map(function(m){return '<option'+(m===GEM.model?" selected":"")+'>'+esc(m)+'</option>';}).join("")+'</select></label>':"")+'</div>';
   h+='<div class="actions" style="margin:12px 16px 0"><button class="btn solid wide" data-act="gemtest"'+(GEMUI.busy?" disabled":"")+'>'+(GEMUI.busy?"Test en cours…":"Enregistrer et tester")+'</button></div>';
   h+='<p class="gf">'+(GEMUI.status?esc(GEMUI.status)+" ":"")+'Crée une clé gratuite sur Google AI Studio, puis colle-la ici. Elle reste sur ton iPhone. <a class="inline-link" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Obtenir une clé</a></p></section>';
+  if(GEM.key&&GEM.models&&GEM.models.length){
+    var rt=gemResetTime(),order=gemOrder("default");
+    h+=group("Quotas gratuits du jour",order.map(function(m){var dead=gemIsDead(m);return '<div class="cell"><div class="cell-body"><div class="cell-title">'+esc(m)+'</div><div class="cell-sub'+(dead?" danger":"")+'">'+(dead?"Épuisé, se recharge"+(rt?" vers "+esc(rt):" cette nuit"):"Disponible")+'</div></div></div>';}).join(""),"Chaque modèle a son propre quota : quand l'un est épuisé, l'app passe tout seul au suivant. Corrections et tuteur utilisent les modèles Flash d'abord ; la lecture des photos et les cartes, Flash-Lite, dont le quota est bien plus large. Enregistrer et tester remet tous les modèles à l'essai.",true);
+  }
   return h;
 }
 function gemTest(){
-  GEM.key=String(GEM.key||"").trim();gemSave();
+  GEM.key=String(GEM.key||"").trim();GEM.dead={};gemSave();
   if(!GEM.key){GEMUI.status="Colle d'abord ta clé.";CAP.sample=null;CAP.img=false;softRender();return;}
   GEMUI.busy=true;GEMUI.status="";softRender();
-  gemDiscover().catch(function(e){if(e&&e.code==="bad_key")throw e;}).then(function(){return gemSample("Réponds seulement : OK",{});}).then(function(){GEMUI.status="L'IA fonctionne, avec le modèle "+GEM.model+".";CAP.sample=gemSample;CAP.img=true;CAP.imgMax=4;CAP.tools=false;},function(e){GEMUI.status=errMsg(e&&e.code);}).then(function(){GEMUI.busy=false;softRender();});
+  gemDiscover().catch(function(e){if(e&&e.code==="bad_key")throw e;}).then(function(){return gemSample("Réponds seulement : OK",{modelTier:"quick"});}).then(function(r){GEMUI.status="L'IA fonctionne. Modèle principal : "+GEM.model+".";CAP.sample=gemSample;CAP.img=true;CAP.imgMax=4;CAP.tools=false;},function(e){GEMUI.status=errMsg(e&&e.code);}).then(function(){GEMUI.busy=false;softRender();});
 }
 var IDB=null;
 function idb(){if(IDB)return IDB;IDB=new Promise(function(res,rej){var r=indexedDB.open("prepa-fichiers",1);r.onupgradeneeded=function(){r.result.createObjectStore("f");};r.onsuccess=function(){res(r.result);};r.onerror=function(){rej(r.error);};});return IDB;}
@@ -2491,9 +2586,9 @@ var localAssets={
 function standaloneInit(){
   gemLoad();
   CAP.assets=localAssets;CAP.ready.sample=true;
-  if(GEM.key){CAP.sample=gemSample;CAP.img=true;CAP.imgMax=4;CAP.tools=false;}
+  if(GEM.key){CAP.sample=gemSample;CAP.img=true;CAP.imgMax=4;CAP.tools=false;if(!(GEM.models&&GEM.models.length))gemDiscover().then(function(){softRender();},function(){});}
   goLocal();
-  try{if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(function(){});}catch(e){}
+  try{if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(function(){});}catch(e){}
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
 }
 function welcomeCard(){
@@ -2695,7 +2790,7 @@ document.addEventListener("change",function(ev){
     else{var p=d.dsnote.split("|"),r=S.ds[p[0]]||(S.ds[p[0]]={});r.n=r.n||[];r.n[+p[1]]=isNaN(v)?null:v;}
     save();softRender();
   }
-  else if(d.file){var fs=t.files;if(d.file==="imp"){IMP.files=IMP.files.concat([].slice.call(fs||[])).slice(0,20);t.value="";render({keep:window.scrollY});}else if(fs&&fs[0]&&d.file==="chat"){chatImg=fs[0];t.value="";render({keep:window.scrollY});}}
+  else if(d.file){var fs=[].slice.call(t.files||[]);t.value="";if(d.file==="imp"){IMP.prep=true;softRender();prepImgs(fs).then(function(l){IMP.files=IMP.files.concat(l).slice(0,20);IMP.prep=false;render({keep:window.scrollY});});}else if(fs[0]&&d.file==="chat"){prepImg(fs[0]).then(function(f){chatImg=f;render({keep:window.scrollY});});}}
   else if(d.drs&&DRAFT){DRAFT[d.drs]=t.value;if(d.drs==="mat")DRAFT.chap="";render({keep:window.scrollY});}
   else if(d.ids&&ID){ID[d.ids]=t.value;render({keep:window.scrollY});}
   else if(d.airs&&AIR){AIR[d.airs]=t.value;render({keep:window.scrollY});}
@@ -2749,5 +2844,6 @@ render();
 initCaps();
 })();
 </script>
+<script src="suivi.js?v=1"></script>
 </body>
 </html>
