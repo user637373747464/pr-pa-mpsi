@@ -1,16 +1,16 @@
-/* Prépa X-ENS : module Suivi (focus, sommeil, sport, échecs, bilan) */
+/* PrÃ©pa X-ENS : module Suivi (focus, sommeil, sport, Ã©checs, bilan) */
 (function(){
 "use strict";
 if(window.__SUIVI__)return;window.__SUIVI__=true;
 
 var KEY="xens-suivi-v1";
-var MATS=[["maths","Maths","var(--c-maths)"],["pc","Physique-chimie","var(--c-phy)"],["si","SI","var(--c-psi)"],["info","Info","var(--c-info)"],["fr","Français","var(--c-fr)"],["en","Anglais","var(--c-lv)"],["autre","Autre","var(--c-ens)"]];
+var MATS=[["maths","Maths","var(--c-maths)"],["pc","Physique-chimie","var(--c-phy)"],["si","SI","var(--c-psi)"],["info","Info","var(--c-info)"],["fr","FranÃ§ais","var(--c-fr)"],["en","Anglais","var(--c-lv)"],["autre","Autre","var(--c-ens)"]];
 var MATI={};MATS.forEach(function(m){MATI[m[0]]=m;});
-var SPORTS=["Musculation","Course","Natation","Plongée","Vélo","Autre"];
+var SPORTS=["Musculation","Course","Natation","PlongÃ©e","VÃ©lo","Autre"];
 var PRESETS=[[25,5],[50,10],[90,15]];
 var CAD={rapid:"Rapide",blitz:"Blitz",bullet:"Bullet"};
 
-function dflt(){return {v:1,tab:"focus",focus:[],sleep:{},sport:[],chess:{site:"chesscom",user:"",cad:"rapid",goal:1500,hist:[],last:0,cur:null},notes:{},cfg:{preset:0,mat:"maths",sc:false,scName:"Prépa Focus",sleepGoal:7},T:null};}
+function dflt(){return {v:1,tab:"focus",focus:[],sleep:{},sport:[],chess:{site:"chesscom",user:"",cad:"rapid",goal:1500,hist:[],last:0,cur:null},notes:{},cfg:{preset:0,mat:"maths",sc:false,scName:"PrÃ©pa Focus",sleepGoal:7},T:null};}
 var D=(function(){var d=dflt();try{var r=JSON.parse(localStorage.getItem(KEY)||"null");if(r&&r.v===1){for(var k in d)if(!(k in r))r[k]=d[k];for(var c in d.cfg)if(!(c in r.cfg))r.cfg[c]=d.cfg[c];for(var h in d.chess)if(!(h in r.chess))r.chess[h]=d.chess[h];return r;}}catch(e){}return d;})();
 function save(){try{localStorage.setItem(KEY,JSON.stringify(D));}catch(e){}}
 
@@ -115,7 +115,7 @@ function bars(opt){
 }
 function niceMax(v){var e=Math.pow(10,Math.floor(Math.log10(v))),f=v/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e;}
 function line(pts,goal){
-  if(pts.length<2)return '<div class="sv-empty">La courbe apparaîtra après quelques parties.</div>';
+  if(pts.length<2)return '<div class="sv-empty">La courbe apparaÃ®tra aprÃ¨s quelques parties.</div>';
   var W=340,H=170,L=38,B=22,T=12,ih=H-B-T,iw=W-L-10;
   var vs=pts.map(function(p){return p.v;}).concat(goal?[goal]:[]),lo=Math.min.apply(null,vs),hi=Math.max.apply(null,vs);
   lo=Math.floor((lo-20)/50)*50;hi=Math.ceil((hi+20)/50)*50;if(hi===lo)hi=lo+50;
@@ -165,16 +165,16 @@ function vFocus(){
   var p=PRESETS[D.cfg.preset]||PRESETS[0];
   var dur=T?T.dur:p[0]*60,left=T?tLeft():dur,frac=T?left/dur:1;
   var col=T&&T.mode==="break"?"var(--c-info)":(MATI[T?T.mat:D.cfg.mat]||MATS[0])[2];
-  var sub=!T?"Prêt":T.mode==="break"?"Pause":(T.paused!=null?"En pause, ":"")+(MATI[T.mat]||MATS[6])[1];
+  var sub=!T?"PrÃªt":T.mode==="break"?"Pause":(T.paused!=null?"En pause, ":"")+(MATI[T.mat]||MATS[6])[1];
   if(!T){
-    h+='<div class="sv-chips" role="group" aria-label="Matière">'+MATS.map(function(m){return '<button class="sv-chip" data-sv="mat" data-v="'+m[0]+'" aria-pressed="'+(D.cfg.mat===m[0])+'"><i style="background:'+m[2]+'"></i>'+m[1]+'</button>';}).join("")+'</div>';
-    h+='<div class="sv-chips" role="group" aria-label="Durée">'+PRESETS.map(function(q,i){return '<button class="sv-chip" data-sv="preset" data-v="'+i+'" aria-pressed="'+(D.cfg.preset===i)+'">'+q[0]+' min, pause '+q[1]+'</button>';}).join("")+'</div>';
+    h+='<div class="sv-chips" role="group" aria-label="MatiÃ¨re">'+MATS.map(function(m){return '<button class="sv-chip" data-sv="mat" data-v="'+m[0]+'" aria-pressed="'+(D.cfg.mat===m[0])+'"><i style="background:'+m[2]+'"></i>'+m[1]+'</button>';}).join("")+'</div>';
+    h+='<div class="sv-chips" role="group" aria-label="DurÃ©e">'+PRESETS.map(function(q,i){return '<button class="sv-chip" data-sv="preset" data-v="'+i+'" aria-pressed="'+(D.cfg.preset===i)+'">'+q[0]+' min, pause '+q[1]+'</button>';}).join("")+'</div>';
   }
   h+='<div class="sv-timer">'+ring(frac,col)+'<div class="sv-tt"><b id="svtime">'+mmss(left)+'</b><span id="svsub">'+esc(sub)+'</span></div></div>';
-  if(!T)h+='<div class="sv-btns"><button class="sv-b solid" data-sv="start">Démarrer</button></div>';
+  if(!T)h+='<div class="sv-btns"><button class="sv-b solid" data-sv="start">DÃ©marrer</button></div>';
   else if(T.mode==="work")h+='<div class="sv-btns"><button class="sv-b" data-sv="pause">'+(T.paused!=null?"Reprendre":"Pause")+'</button><button class="sv-b" data-sv="stop">Terminer</button></div>';
   else h+='<div class="sv-btns"><button class="sv-b" data-sv="skip">Passer la pause</button></div>';
-  if(T&&T.mode==="work")h+='<p class="sv-f" style="margin-top:-12px">Si tu termines avant la fin, la séance compte à partir de 5 minutes.</p>';
+  if(T&&T.mode==="work")h+='<p class="sv-f" style="margin-top:-12px">Si tu termines avant la fin, la sÃ©ance compte Ã  partir de 5 minutes.</p>';
   // stats
   var t=today(),wk=monday(t),todayMin=0,weekMin=0,byMat={};
   D.focus.forEach(function(f){if(f.d===t)todayMin+=f.min;if(f.d>=wk&&f.d<=t){weekMin+=f.min;byMat[f.m]=(byMat[f.m]||0)+f.min;}});
@@ -183,14 +183,14 @@ function vFocus(){
   D.focus.forEach(function(f){if(!map[f.d])map[f.d]={};map[f.d][f.m]=(map[f.d][f.m]||0)+f.min;});
   var stacks=days.map(function(d){var o=map[d]||{};return MATS.map(function(m){return {v:(o[m[0]]||0)/60,c:m[2]};});});
   var any=D.focus.some(function(f){return f.d>=days[0];});
-  h+='<h2 class="sv-h">Travail concentré, 14 derniers jours</h2><div class="sv-card">'+(any?bars({labels:days.map(function(d,i){return i%2?"":String(+d.slice(8));}),stacks:stacks,fmt:function(v){return v?(Math.round(v*10)/10)+" h":"0";},aria:"Heures de travail par jour"}):'<div class="sv-empty">Lance un premier chrono : tes heures s\'afficheront ici, par matière.</div>');
+  h+='<h2 class="sv-h">Travail concentrÃ©, 14 derniers jours</h2><div class="sv-card">'+(any?bars({labels:days.map(function(d,i){return i%2?"":String(+d.slice(8));}),stacks:stacks,fmt:function(v){return v?(Math.round(v*10)/10)+" h":"0";},aria:"Heures de travail par jour"}):'<div class="sv-empty">Lance un premier chrono : tes heures s\'afficheront ici, par matiÃ¨re.</div>');
   var used=MATS.filter(function(m){return byMat[m[0]];});
   if(used.length)h+='<div class="sv-leg">'+used.map(function(m){return '<span><i style="background:'+m[2]+'"></i>'+m[1]+' '+hm(byMat[m[0]])+'</span>';}).join("")+'</div>';
-  h+='</div><p class="sv-f">Sous le graphe : ton total de la semaine par matière.</p>';
+  h+='</div><p class="sv-f">Sous le graphe : ton total de la semaine par matiÃ¨re.</p>';
   // saisie manuelle
-  h+='<h2 class="sv-h">Ajouter une séance sans le chrono</h2><div class="sv-card"><div class="sv-row"><span>Matière</span><select data-svm="mat">'+MATS.map(function(m){return '<option value="'+m[0]+'"'+(m[0]===D.cfg.mat?" selected":"")+'>'+m[1]+'</option>';}).join("")+'</select></div><div class="sv-row"><span>Durée en minutes</span><input type="number" inputmode="numeric" min="1" max="600" data-svm="min" placeholder="45"></div><div class="sv-row"><span></span><button class="sv-b sm" data-sv="addfocus">Ajouter</button></div></div>';
+  h+='<h2 class="sv-h">Ajouter une sÃ©ance sans le chrono</h2><div class="sv-card"><div class="sv-row"><span>MatiÃ¨re</span><select data-svm="mat">'+MATS.map(function(m){return '<option value="'+m[0]+'"'+(m[0]===D.cfg.mat?" selected":"")+'>'+m[1]+'</option>';}).join("")+'</select></div><div class="sv-row"><span>DurÃ©e en minutes</span><input type="number" inputmode="numeric" min="1" max="600" data-svm="min" placeholder="45"></div><div class="sv-row"><span></span><button class="sv-b sm" data-sv="addfocus">Ajouter</button></div></div>';
   // concentration iOS
-  h+='<h2 class="sv-h">Mode Concentration de l\'iPhone</h2><div class="sv-card"><div class="sv-row"><span>Lancer mon raccourci au démarrage<small>Active ton mode Concentration et un minuteur</small></span><input type="checkbox" data-svc="sc"'+(D.cfg.sc?" checked":"")+' style="width:22px;height:22px;-webkit-appearance:checkbox;appearance:auto"></div><div class="sv-row"><span>Nom du raccourci</span><input data-svc="scName" value="'+esc(D.cfg.scName)+'" style="width:150px"></div></div><p class="sv-f">Le raccourci reçoit la durée en minutes. Crée-le d\'abord dans l\'app Raccourcis.</p>';
+  h+='<h2 class="sv-h">Mode Concentration de l\'iPhone</h2><div class="sv-card"><div class="sv-row"><span>Lancer mon raccourci au dÃ©marrage<small>Active ton mode Concentration et un minuteur</small></span><input type="checkbox" data-svc="sc"'+(D.cfg.sc?" checked":"")+' style="width:22px;height:22px;-webkit-appearance:checkbox;appearance:auto"></div><div class="sv-row"><span>Nom du raccourci</span><input data-svc="scName" value="'+esc(D.cfg.scName)+'" style="width:150px"></div></div><p class="sv-f">Le raccourci reÃ§oit la durÃ©e en minutes. CrÃ©e-le d\'abord dans l\'app Raccourcis.</p>';
   return h;
 }
 
@@ -201,19 +201,19 @@ var SQ=3;
 function vSleep(){
   var t=today(),e=D.sleep[t],h="";
   var bed=e?e.bed:"22:00",wake=e?e.wake:"05:00";SQ=e?e.q:SQ;
-  h+='<h2 class="sv-h">Nuit dernière</h2><div class="sv-card"><div class="sv-row"><span>Coucher</span><input type="time" data-svs="bed" value="'+bed+'"></div><div class="sv-row"><span>Lever</span><input type="time" data-svs="wake" value="'+wake+'"></div><div class="sv-row"><span>Qualité</span><div class="sv-q" role="group" aria-label="Qualité du sommeil">'+[1,2,3,4,5].map(function(q){return '<button data-sv="sq" data-v="'+q+'" aria-pressed="'+(SQ===q)+'">'+q+'</button>';}).join("")+'</div></div></div>';
-  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="savesleep">'+(e?"Mettre à jour":"Enregistrer")+'</button></div>';
+  h+='<h2 class="sv-h">Nuit derniÃ¨re</h2><div class="sv-card"><div class="sv-row"><span>Coucher</span><input type="time" data-svs="bed" value="'+bed+'"></div><div class="sv-row"><span>Lever</span><input type="time" data-svs="wake" value="'+wake+'"></div><div class="sv-row"><span>QualitÃ©</span><div class="sv-q" role="group" aria-label="QualitÃ© du sommeil">'+[1,2,3,4,5].map(function(q){return '<button data-sv="sq" data-v="'+q+'" aria-pressed="'+(SQ===q)+'">'+q+'</button>';}).join("")+'</div></div></div>';
+  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="savesleep">'+(e?"Mettre Ã  jour":"Enregistrer")+'</button></div>';
   var days=focusDays(14),goal=D.cfg.sleepGoal,list=days.map(function(d){return D.sleep[d];});
   var last7=focusDays(7).map(function(d){return D.sleep[d];}).filter(Boolean);
   var avg=last7.length?last7.reduce(function(a,x){return a+sleepDur(x.bed,x.wake);},0)/last7.length:0;
-  var reg="–";if(last7.length>=3){var bm=last7.map(function(x){return bedMin(x.bed);}),mu=bm.reduce(function(a,b){return a+b;},0)/bm.length;reg="± "+Math.round(Math.sqrt(bm.reduce(function(a,b){return a+(b-mu)*(b-mu);},0)/bm.length))+" min";}
-  h+='<div class="sv-stats"><div><b>'+(avg?hm(avg):"–")+'</b><span>moyenne sur 7 jours</span></div><div><b>'+reg+'</b><span>écart de l\'heure de coucher</span></div></div>';
+  var reg="â€“";if(last7.length>=3){var bm=last7.map(function(x){return bedMin(x.bed);}),mu=bm.reduce(function(a,b){return a+b;},0)/bm.length;reg="Â± "+Math.round(Math.sqrt(bm.reduce(function(a,b){return a+(b-mu)*(b-mu);},0)/bm.length))+" min";}
+  h+='<div class="sv-stats"><div><b>'+(avg?hm(avg):"â€“")+'</b><span>moyenne sur 7 jours</span></div><div><b>'+reg+'</b><span>Ã©cart de l\'heure de coucher</span></div></div>';
   var any=list.some(Boolean);
-  h+='<h2 class="sv-h">Durée de sommeil, 14 dernières nuits</h2><div class="sv-card">'+(any?bars({labels:days.map(function(d,i){return i%2?"":String(+d.slice(8));}),stacks:list.map(function(x){return [{v:x?sleepDur(x.bed,x.wake)/60:0,c:x&&sleepDur(x.bed,x.wake)/60>=goal?"var(--c-info)":"var(--c-phy)"}];}),goal:goal,fmt:function(v){return Math.round(v)+" h";},aria:"Heures de sommeil par nuit"}):'<div class="sv-empty">Note ta nuit chaque matin : ta courbe se construit en une semaine.</div>')+'</div>';
-  h+='<p class="sv-f">En vert, les nuits qui atteignent ton objectif (trait rouge). Un coucher régulier compte autant que la durée.</p>';
+  h+='<h2 class="sv-h">DurÃ©e de sommeil, 14 derniÃ¨res nuits</h2><div class="sv-card">'+(any?bars({labels:days.map(function(d,i){return i%2?"":String(+d.slice(8));}),stacks:list.map(function(x){return [{v:x?sleepDur(x.bed,x.wake)/60:0,c:x&&sleepDur(x.bed,x.wake)/60>=goal?"var(--c-info)":"var(--c-phy)"}];}),goal:goal,fmt:function(v){return Math.round(v)+" h";},aria:"Heures de sommeil par nuit"}):'<div class="sv-empty">Note ta nuit chaque matin : ta courbe se construit en une semaine.</div>')+'</div>';
+  h+='<p class="sv-f">En vert, les nuits qui atteignent ton objectif (trait rouge). Un coucher rÃ©gulier compte autant que la durÃ©e.</p>';
   h+='<h2 class="sv-h">Objectif</h2><div class="sv-card"><div class="sv-row"><span>Heures par nuit</span><input type="number" inputmode="decimal" step="0.5" min="5" max="10" data-svc="sleepGoal" value="'+goal+'"></div></div>';
   var rec=Object.keys(D.sleep).sort().reverse().slice(0,7);
-  if(rec.length)h+='<h2 class="sv-h">Dernières nuits</h2><div class="sv-card">'+rec.map(function(d){var x=D.sleep[d];return '<div class="sv-row"><span>'+esc(cap(FD.format(dObj(d))))+'<small>'+x.bed+' à '+x.wake+', qualité '+x.q+'/5</small></span><b style="font-variant-numeric:tabular-nums">'+hm(sleepDur(x.bed,x.wake))+'</b><button class="sv-del" data-sv="delsleep" data-v="'+d+'" aria-label="Supprimer">×</button></div>';}).join("")+'</div>';
+  if(rec.length)h+='<h2 class="sv-h">DerniÃ¨res nuits</h2><div class="sv-card">'+rec.map(function(d){var x=D.sleep[d];return '<div class="sv-row"><span>'+esc(cap(FD.format(dObj(d))))+'<small>'+x.bed+' Ã  '+x.wake+', qualitÃ© '+x.q+'/5</small></span><b style="font-variant-numeric:tabular-nums">'+hm(sleepDur(x.bed,x.wake))+'</b><button class="sv-del" data-sv="delsleep" data-v="'+d+'" aria-label="Supprimer">Ã—</button></div>';}).join("")+'</div>';
   return h;
 }
 function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
@@ -222,21 +222,21 @@ function cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 var SPT={type:"Musculation"};
 function vSport(){
   var h="",t=today(),wk=monday(t);
-  h+='<div class="sv-chips" role="group" aria-label="Activité">'+SPORTS.map(function(s){return '<button class="sv-chip" data-sv="stype" data-v="'+s+'" aria-pressed="'+(SPT.type===s)+'">'+s+'</button>';}).join("")+'</div>';
-  h+='<div class="sv-card"><div class="sv-row"><span>Date</span><input type="date" data-svp="d" value="'+t+'"></div><div class="sv-row"><span>Durée en minutes</span><input type="number" inputmode="numeric" min="5" max="400" data-svp="min" placeholder="45"></div></div>';
-  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="addsport">Ajouter la séance</button></div>';
+  h+='<div class="sv-chips" role="group" aria-label="ActivitÃ©">'+SPORTS.map(function(s){return '<button class="sv-chip" data-sv="stype" data-v="'+s+'" aria-pressed="'+(SPT.type===s)+'">'+s+'</button>';}).join("")+'</div>';
+  h+='<div class="sv-card"><div class="sv-row"><span>Date</span><input type="date" data-svp="d" value="'+t+'"></div><div class="sv-row"><span>DurÃ©e en minutes</span><input type="number" inputmode="numeric" min="5" max="400" data-svp="min" placeholder="45"></div></div>';
+  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="addsport">Ajouter la sÃ©ance</button></div>';
   var ws=D.sport.filter(function(s){return s.d>=wk&&s.d<=t;}),wmin=ws.reduce(function(a,s){return a+s.min;},0);
-  h+='<div class="sv-stats"><div><b>'+ws.length+'</b><span>séance'+(ws.length>1?"s":"")+' cette semaine</span></div><div><b>'+hm(wmin)+'</b><span>de sport cette semaine</span></div></div>';
+  h+='<div class="sv-stats"><div><b>'+ws.length+'</b><span>sÃ©ance'+(ws.length>1?"s":"")+' cette semaine</span></div><div><b>'+hm(wmin)+'</b><span>de sport cette semaine</span></div></div>';
   var weeks=[];for(var i=7;i>=0;i--)weeks.push(addDays(wk,-7*i));
   var vals=weeks.map(function(w){var e=addDays(w,6);return D.sport.filter(function(s){return s.d>=w&&s.d<=e;}).reduce(function(a,s){return a+s.min;},0)/60;});
   var any=vals.some(function(v){return v>0;});
-  h+='<h2 class="sv-h">Heures de sport par semaine</h2><div class="sv-card">'+(any?bars({labels:weeks.map(function(w){return FDM.format(dObj(w)).replace(".","");}).map(function(l,i){return i%2?"":l;}),stacks:vals.map(function(v){return [{v:v,c:"var(--c-psi)"}];}),fmt:function(v){return (Math.round(v*10)/10)+" h";},aria:"Heures de sport par semaine"}):'<div class="sv-empty">Ajoute ta première séance pour voir tes semaines.</div>')+'</div>';
+  h+='<h2 class="sv-h">Heures de sport par semaine</h2><div class="sv-card">'+(any?bars({labels:weeks.map(function(w){return FDM.format(dObj(w)).replace(".","");}).map(function(l,i){return i%2?"":l;}),stacks:vals.map(function(v){return [{v:v,c:"var(--c-psi)"}];}),fmt:function(v){return (Math.round(v*10)/10)+" h";},aria:"Heures de sport par semaine"}):'<div class="sv-empty">Ajoute ta premiÃ¨re sÃ©ance pour voir tes semaines.</div>')+'</div>';
   var rec=D.sport.slice().sort(function(a,b){return a.d<b.d?1:-1;}).slice(0,8);
-  if(rec.length)h+='<h2 class="sv-h">Dernières séances</h2><div class="sv-card">'+rec.map(function(s){return '<div class="sv-row"><span>'+esc(s.type)+'<small>'+esc(cap(FD.format(dObj(s.d))))+'</small></span><b style="font-variant-numeric:tabular-nums">'+hm(s.min)+'</b><button class="sv-del" data-sv="delsport" data-v="'+esc(s.id)+'" aria-label="Supprimer">×</button></div>';}).join("")+'</div>';
+  if(rec.length)h+='<h2 class="sv-h">DerniÃ¨res sÃ©ances</h2><div class="sv-card">'+rec.map(function(s){return '<div class="sv-row"><span>'+esc(s.type)+'<small>'+esc(cap(FD.format(dObj(s.d))))+'</small></span><b style="font-variant-numeric:tabular-nums">'+hm(s.min)+'</b><button class="sv-del" data-sv="delsport" data-v="'+esc(s.id)+'" aria-label="Supprimer">Ã—</button></div>';}).join("")+'</div>';
   return h;
 }
 
-/* ---------- Échecs ---------- */
+/* ---------- Ã‰checs ---------- */
 var CH={busy:false,err:""};
 function chessAuto(){var c=D.chess;if(c.user&&Date.now()-c.last>3600000&&!CH.busy)chessFetch();}
 function jget(u){return fetch(u,{headers:{"Accept":"application/json"}}).then(function(r){if(r.status===404)throw {code:404};if(!r.ok)throw {code:r.status};return r.json();});}
@@ -245,7 +245,7 @@ function chessFetch(){
   CH.busy=true;CH.err="";render();
   var p=c.site==="lichess"?fetchLichess(u,c.cad):fetchChesscom(u.toLowerCase(),c.cad);
   p.then(function(r){c.cur=r.cur;if(r.hist&&r.hist.length)c.hist=r.hist;else if(r.cur){var d=today();c.hist=(c.hist||[]).filter(function(x){return x.d!==d;});c.hist.push({d:d,t:Date.now(),v:r.cur});}c.last=Date.now();c.fetchedFor=c.site+"|"+u.toLowerCase()+"|"+c.cad;save();},
-    function(e){CH.err=e&&e.code===404?"Pseudo introuvable sur ce site : vérifie l'orthographe.":e&&e.code===429?"Trop de demandes au site d'échecs : réessaie dans une minute.":"Impossible de joindre le site d'échecs. Vérifie ta connexion.";})
+    function(e){CH.err=e&&e.code===404?"Pseudo introuvable sur ce site : vÃ©rifie l'orthographe.":e&&e.code===429?"Trop de demandes au site d'Ã©checs : rÃ©essaie dans une minute.":"Impossible de joindre le site d'Ã©checs. VÃ©rifie ta connexion.";})
    .then(function(){CH.busy=false;if(OPEN&&D.tab==="chess")render();});
 }
 function fetchLichess(u,cad){
@@ -275,15 +275,15 @@ function fetchChesscom(u,cad){
 function vChess(){
   var c=D.chess,h="";
   h+='<div class="sv-card"><div class="sv-row"><span>Site</span><select data-svh="site"><option value="chesscom"'+(c.site==="chesscom"?" selected":"")+'>Chess.com</option><option value="lichess"'+(c.site==="lichess"?" selected":"")+'>Lichess</option></select></div><div class="sv-row"><span>Pseudo</span><input data-svh="user" value="'+esc(c.user)+'" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="ton pseudo" style="width:160px"></div><div class="sv-row"><span>Cadence</span><select data-svh="cad">'+Object.keys(CAD).map(function(k){return '<option value="'+k+'"'+(c.cad===k?" selected":"")+'>'+CAD[k]+'</option>';}).join("")+'</select></div><div class="sv-row"><span>Objectif</span><input type="number" inputmode="numeric" data-svh="goal" value="'+c.goal+'"></div></div>';
-  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="chessgo"'+(CH.busy||!c.user?" disabled":"")+'>'+(CH.busy?"Chargement…":"Actualiser mon classement")+'</button></div>';
+  h+='<div class="sv-btns"><button class="sv-b solid" data-sv="chessgo"'+(CH.busy||!c.user?" disabled":"")+'>'+(CH.busy?"Chargementâ€¦":"Actualiser mon classement")+'</button></div>';
   if(CH.err)h+='<p class="sv-err">'+esc(CH.err)+'</p>';
-  if(!c.user)return h+'<p class="sv-f" style="margin-top:0">Entre ton pseudo : l\'app récupère ton classement et ses progrès toute seule.</p>';
+  if(!c.user)return h+'<p class="sv-f" style="margin-top:0">Entre ton pseudo : l\'app rÃ©cupÃ¨re ton classement et ses progrÃ¨s toute seule.</p>';
   var pts=(c.hist||[]).map(function(x){return {t:x.t,v:x.v};});
   var cur=c.cur,m30=null;
   if(pts.length){var cut=Date.now()-30*864e5,old=pts.filter(function(p){return p.t<=cut;}).pop()||pts[0];if(cur!=null)m30=cur-old.v;}
-  h+='<div class="sv-stats"><div><b>'+(cur!=null?cur:"–")+'</b><span>'+CAD[c.cad].toLowerCase()+' actuel</span></div><div><b>'+(m30==null?"–":(m30>0?"+":"")+m30)+'</b><span>sur 30 jours</span></div><div><b>'+(cur!=null?Math.max(0,c.goal-cur):"–")+'</b><span>avant '+c.goal+'</span></div></div>';
+  h+='<div class="sv-stats"><div><b>'+(cur!=null?cur:"â€“")+'</b><span>'+CAD[c.cad].toLowerCase()+' actuel</span></div><div><b>'+(m30==null?"â€“":(m30>0?"+":"")+m30)+'</b><span>sur 30 jours</span></div><div><b>'+(cur!=null?Math.max(0,c.goal-cur):"â€“")+'</b><span>avant '+c.goal+'</span></div></div>';
   h+='<h2 class="sv-h">Progression</h2><div class="sv-card">'+line(pts,c.goal)+'</div>';
-  if(c.last)h+='<p class="sv-f">Mis à jour '+esc(new Intl.DateTimeFormat("fr-FR",{weekday:"long",hour:"2-digit",minute:"2-digit"}).format(new Date(c.last)))+'.</p>';
+  if(c.last)h+='<p class="sv-f">Mis Ã  jour '+esc(new Intl.DateTimeFormat("fr-FR",{weekday:"long",hour:"2-digit",minute:"2-digit"}).format(new Date(c.last)))+'.</p>';
   return h;
 }
 
@@ -297,16 +297,16 @@ function weekStats(w){
 }
 function vBilan(){
   var t=today(),w=monday(t),pw=addDays(w,-7),a=weekStats(w),b=weekStats(pw),h="";
-  function diff(x,y,f){if(!y)return "";var d=x-y;return ' <span style="font-size:13px;font-weight:500;color:var(--label2)">('+(d>=0?"+":"−")+f(Math.abs(d))+')</span>';}
-  h+='<h2 class="sv-h">Semaine du '+esc(FDM.format(dObj(w)))+', comparée à la précédente</h2><div class="sv-card">';
-  h+='<div class="sv-row"><span>Travail concentré</span><b>'+hm(a.f)+diff(a.f,b.f,hm)+'</b></div>';
-  h+='<div class="sv-row"><span>Sommeil moyen<small>'+a.nsl+' nuit'+(a.nsl>1?"s":"")+' notée'+(a.nsl>1?"s":"")+'</small></span><b>'+(a.sl?hm(a.sl):"–")+(a.sl&&b.sl?diff(a.sl,b.sl,hm):"")+'</b></div>';
-  h+='<div class="sv-row"><span>Sport</span><b>'+a.sp+' séance'+(a.sp>1?"s":"")+'</b></div>';
-  var c=D.chess;if(c.cur!=null){var old=(c.hist||[]).filter(function(x){return x.d<w;}).pop();h+='<div class="sv-row"><span>Échecs, '+CAD[c.cad].toLowerCase()+'</span><b>'+c.cur+(old?' <span style="font-size:13px;font-weight:500;color:var(--label2)">('+(c.cur-old.v>=0?"+":"−")+Math.abs(c.cur-old.v)+')</span>':"")+'</b></div>';}
+  function diff(x,y,f){if(!y)return "";var d=x-y;return ' <span style="font-size:13px;font-weight:500;color:var(--label2)">('+(d>=0?"+":"âˆ’")+f(Math.abs(d))+')</span>';}
+  h+='<h2 class="sv-h">Semaine du '+esc(FDM.format(dObj(w)))+', comparÃ©e Ã  la prÃ©cÃ©dente</h2><div class="sv-card">';
+  h+='<div class="sv-row"><span>Travail concentrÃ©</span><b>'+hm(a.f)+diff(a.f,b.f,hm)+'</b></div>';
+  h+='<div class="sv-row"><span>Sommeil moyen<small>'+a.nsl+' nuit'+(a.nsl>1?"s":"")+' notÃ©e'+(a.nsl>1?"s":"")+'</small></span><b>'+(a.sl?hm(a.sl):"â€“")+(a.sl&&b.sl?diff(a.sl,b.sl,hm):"")+'</b></div>';
+  h+='<div class="sv-row"><span>Sport</span><b>'+a.sp+' sÃ©ance'+(a.sp>1?"s":"")+'</b></div>';
+  var c=D.chess;if(c.cur!=null){var old=(c.hist||[]).filter(function(x){return x.d<w;}).pop();h+='<div class="sv-row"><span>Ã‰checs, '+CAD[c.cad].toLowerCase()+'</span><b>'+c.cur+(old?' <span style="font-size:13px;font-weight:500;color:var(--label2)">('+(c.cur-old.v>=0?"+":"âˆ’")+Math.abs(c.cur-old.v)+')</span>':"")+'</b></div>';}
   h+='</div>';
   var used=MATS.filter(function(m){return a.byMat[m[0]];});
-  if(used.length)h+='<h2 class="sv-h">Répartition du travail cette semaine</h2><div class="sv-card">'+used.map(function(m){var pc=Math.round(100*a.byMat[m[0]]/a.f);return '<div class="sv-row"><span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+m[2]+';margin-right:8px"></i>'+m[1]+'</span><b style="font-variant-numeric:tabular-nums">'+hm(a.byMat[m[0]])+' <span style="font-size:13px;font-weight:500;color:var(--label2)">'+pc+' %</span></b></div>';}).join("")+'</div>';
-  h+='<h2 class="sv-h">Ce que je change la semaine prochaine</h2><div class="sv-card"><textarea data-svn="'+w+'" placeholder="Une ou deux décisions concrètes, par exemple : couché à 22 h même la veille des DS.">'+esc(D.notes[w]||"")+'</textarea></div><p class="sv-f">Enregistré automatiquement. Quinze minutes le dimanche suffisent.</p>';
+  if(used.length)h+='<h2 class="sv-h">RÃ©partition du travail cette semaine</h2><div class="sv-card">'+used.map(function(m){var pc=Math.round(100*a.byMat[m[0]]/a.f);return '<div class="sv-row"><span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+m[2]+';margin-right:8px"></i>'+m[1]+'</span><b style="font-variant-numeric:tabular-nums">'+hm(a.byMat[m[0]])+' <span style="font-size:13px;font-weight:500;color:var(--label2)">'+pc+' %</span></b></div>';}).join("")+'</div>';
+  h+='<h2 class="sv-h">Ce que je change la semaine prochaine</h2><div class="sv-card"><textarea data-svn="'+w+'" placeholder="Une ou deux dÃ©cisions concrÃ¨tes, par exemple : couchÃ© Ã  22 h mÃªme la veille des DS.">'+esc(D.notes[w]||"")+'</textarea></div><p class="sv-f">EnregistrÃ© automatiquement. Quinze minutes le dimanche suffisent.</p>';
   h+='<h2 class="sv-h">Sauvegarde du suivi</h2><div class="sv-card"><div class="sv-row"><span>Copie tout ton suivi pour le garder dans Notes</span><button class="sv-b sm" data-sv="export">Copier</button></div><div class="sv-row"><span>Restaurer une sauvegarde</span><button class="sv-b sm" data-sv="import">Coller</button></div></div>';
   if(EXP.msg)h+='<p class="sv-f" style="margin-top:-14px">'+esc(EXP.msg)+'</p>';
   return h;
@@ -314,7 +314,7 @@ function vBilan(){
 var EXP={msg:""};
 
 /* ---------- Rendu ---------- */
-var TABS=[["focus","Focus"],["sleep","Sommeil"],["sport","Sport"],["chess","Échecs"],["bilan","Bilan"]];
+var TABS=[["focus","Focus"],["sleep","Sommeil"],["sport","Sport"],["chess","Ã‰checs"],["bilan","Bilan"]];
 var RENDERING=false;
 function render(){
   if(!OPEN)return;
@@ -325,12 +325,12 @@ function renderNow(){
   catchUp();
   var y=ov.scrollTop;
   var body=D.tab==="sleep"?vSleep():D.tab==="sport"?vSport():D.tab==="chess"?vChess():D.tab==="bilan"?vBilan():vFocus();
-  ov.innerHTML='<div class="sv-in"><div class="sv-top"><h1>Suivi</h1><button class="sv-x" data-sv="close" aria-label="Fermer">×</button></div><div class="sv-tabs" role="group" aria-label="Rubriques">'+TABS.map(function(t){return '<button data-sv="tab" data-v="'+t[0]+'" aria-pressed="'+(D.tab===t[0])+'">'+t[1]+'</button>';}).join("")+'</div>'+body+'</div>';
+  ov.innerHTML='<div class="sv-in"><div class="sv-top"><h1>Suivi</h1><button class="sv-x" data-sv="close" aria-label="Fermer">Ã—</button></div><div class="sv-tabs" role="group" aria-label="Rubriques">'+TABS.map(function(t){return '<button data-sv="tab" data-v="'+t[0]+'" aria-pressed="'+(D.tab===t[0])+'">'+t[1]+'</button>';}).join("")+'</div>'+body+'</div>';
   ov.scrollTop=y;
 }
 function paintFab(){
   var T=D.T;
-  if(T){fab.className="run";fab.innerHTML=IC+'<span>'+(T.mode==="break"?"Pause ":"")+mmss(tLeft())+(T.paused!=null?" ⏸":"")+'</span>';}
+  if(T){fab.className="run";fab.innerHTML=IC+'<span>'+(T.mode==="break"?"Pause ":"")+mmss(tLeft())+(T.paused!=null?" â¸":"")+'</span>';}
   else{fab.className="";fab.innerHTML=IC+'<span>Suivi</span>';}
 }
 var lastTick=Date.now();
@@ -345,7 +345,7 @@ function tick(){
 setInterval(tick,1000);
 document.addEventListener("visibilitychange",function(){if(!document.hidden){lastTick=0;tick();lastTick=Date.now();if(D.T&&D.T.paused==null)wake(true);}});
 
-/* ---------- Événements ---------- */
+/* ---------- Ã‰vÃ©nements ---------- */
 ov.addEventListener("click",function(e){
   var b=e.target.closest("[data-sv]");if(!b)return;
   var a=b.getAttribute("data-sv"),v=b.getAttribute("data-v");
@@ -365,8 +365,8 @@ ov.addEventListener("click",function(e){
   if(a==="addsport"){var sd=ov.querySelector('[data-svp="d"]').value||today(),sm=+(ov.querySelector('[data-svp="min"]').value||0);if(sm>0){D.sport.push({id:String(Date.now()),d:sd,type:SPT.type,min:sm});save();render();}return;}
   if(a==="delsport"){D.sport=D.sport.filter(function(s){return s.id!==v;});save();render();return;}
   if(a==="chessgo"){D.chess.last=0;return chessFetch();}
-  if(a==="export"){var txt=JSON.stringify({app:"prepa-suivi",data:D});(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){EXP.msg="Copié. Colle-le dans une note pour le garder.";},function(){EXP.msg="Copie impossible ici.";}).then(render);return;}
-  if(a==="import"){(navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject()).then(function(t){var o=JSON.parse(t);if(!o||o.app!=="prepa-suivi"||!o.data||o.data.v!==1)throw 0;var keep=D.T;D=o.data;D.T=keep;save();EXP.msg="Sauvegarde restaurée.";},function(){EXP.msg="Copie d'abord une sauvegarde du suivi, puis touche Coller.";}).catch(function(){EXP.msg="Ce texte n'est pas une sauvegarde du suivi.";}).then(render);return;}
+  if(a==="export"){var txt=JSON.stringify({app:"prepa-suivi",data:D});(navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){EXP.msg="CopiÃ©. Colle-le dans une note pour le garder.";},function(){EXP.msg="Copie impossible ici.";}).then(render);return;}
+  if(a==="import"){(navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject()).then(function(t){var o=JSON.parse(t);if(!o||o.app!=="prepa-suivi"||!o.data||o.data.v!==1)throw 0;var keep=D.T;D=o.data;D.T=keep;save();EXP.msg="Sauvegarde restaurÃ©e.";},function(){EXP.msg="Copie d'abord une sauvegarde du suivi, puis touche Coller.";}).catch(function(){EXP.msg="Ce texte n'est pas une sauvegarde du suivi.";}).then(render);return;}
 });
 ov.addEventListener("change",function(e){
   var t=e.target,d=t.dataset;
