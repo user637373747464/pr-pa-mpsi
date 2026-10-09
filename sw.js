@@ -1,10 +1,10 @@
-const CACHE="prepa-v3";
-const SUIVI="suivi.js?v=1";
+const CACHE="prepa-v4";
+const SUIVI="suivi.js?v=2";
 const SHELL=["./","./index.html","./manifest.webmanifest","./apple-touch-icon.png","./icon-512.png","./"+SUIVI];
 self.addEventListener("install",e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>{}));self.skipWaiting();});
 self.addEventListener("activate",e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 function keep(req,res){if(res&&res.ok){const cp=res.clone();caches.open(CACHE).then(c=>c.put(req,cp));}return res;}
-// Filet de sÃ©curitÃ© : si une page n'appelle pas encore le Suivi, on l'ajoute.
+// Filet de sécurité : si une page n'appelle pas encore le Suivi, on l'ajoute.
 async function inject(res){
   if(!res||!res.ok)return res;
   const ct=res.headers.get("content-type")||"";
